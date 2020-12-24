@@ -3,13 +3,13 @@
 package cargo
 
 import (
-	"errors"
 	"fmt"
-	"os"
+
+	"github.com/ArmadaStore/cargo/pkg/lib"
 )
 
-func Run(cargoMgrIP string, cargoMgrPort string) error {
-	fmt.Fprint(os.Stderr, "Entering Run Entry point\n")
-	err := errors.New("Error")
-	return err
+func Run(cargoMgrIP string, cargoMgrPort string, volSize string) error {
+	cargoInfo := lib.Init(cargoMgrIP, cargoMgrPort, volSize)
+	cargoInfo.Register()
+	return fmt.Errorf("Hello")
 }
