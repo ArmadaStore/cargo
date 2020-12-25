@@ -11,7 +11,7 @@ import (
 
 	"github.com/ArmadaStore/cargo/internal/utils"
 	"github.com/ArmadaStore/cargo/pkg/cmd"
-	cargoToMgr "github.com/ArmadaStore/comms/rpc/cargoToMgr"
+	"github.com/ArmadaStore/comms/rpc/cargoToMgr"
 )
 
 type CargoInfo struct {
