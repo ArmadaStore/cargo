@@ -4,15 +4,27 @@ package lib
 
 import (
 	"context"
+	"fmt"
+	"io/ioutil"
+	"net"
 	"strconv"
+	"sync"
 
 	"github.com/phayes/freeport"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 
 	"github.com/ArmadaStore/cargo/internal/utils"
 	"github.com/ArmadaStore/cargo/pkg/cmd"
 	"github.com/ArmadaStore/comms/rpc/cargoToMgr"
+	"github.com/ArmadaStore/comms/rpc/taskToCargo"
 )
+
+type TaskToCargoComm struct {
+	taskToCargo.UnimplementedRpcTaskToCargoServer
+
+	cargoInfo *CargoInfo
+}
 
 type CargoInfo struct {
 	ID           string
@@ -24,6 +36,8 @@ type CargoInfo struct {
 	Lon          float64
 	TSize        float64
 	RSize        float64
+
+	TTC TaskToCargoComm
 }
 
 func Init(cargoMgrIP string, cargoMgrPort string, volSize string) *CargoInfo {
@@ -46,6 +60,8 @@ func Init(cargoMgrIP string, cargoMgrPort string, volSize string) *CargoInfo {
 	cargoInfo.Lon = lon
 	cargoInfo.PublicIP = ip
 
+	cargoInfo.TTC.cargoInfo = &cargoInfo
+
 	return &cargoInfo
 }
 
@@ -66,4 +82,31 @@ func (cargoInfo *CargoInfo) Register() {
 	cmd.CheckError(err)
 
 	cargoInfo.ID = ack.GetID()
+}
+
+func (ttc *TaskToCargoComm) StoreInCargo(ctx context.Context, dts *taskToCargo.DataToStore) (*taskToCargo.Ack, error) {
+	fileName := dts.GetFileName()
+	fileBuffer := dts.GetFileBuffer()
+	//fileSize := dts.GetFileSize()
+	//fileType := dts.GetFileType()
+
+	err := ioutil.WriteFile(fileName, fileBuffer, 0644)
+	cmd.CheckError(err)
+
+	return &taskToCargo.Ack{Ack: "Stored data"}, nil
+}
+
+func (cargoInfo *CargoInfo) ListenTasks(wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	listen, err := net.Listen("tcp", fmt.Sprintf("%s:%d", cargoInfo.PublicIP, cargoInfo.Port))
+	cmd.CheckError(err)
+
+	server := grpc.NewServer()
+	taskToCargo.RegisterRpcTaskToCargoServer(server, &(cargoInfo.TTC))
+
+	reflection.Register(server)
+
+	err = server.Serve(listen)
+	cmd.CheckError(err)
 }
