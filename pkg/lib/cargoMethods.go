@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
+	"os"
 	"strconv"
 	"sync"
 
@@ -43,25 +44,28 @@ type CargoInfo struct {
 func Init(cargoMgrIP string, cargoMgrPort string, volSize string) *CargoInfo {
 	var cargoInfo CargoInfo
 
+	synth := true
 	cargoInfo.CargoMgrIP = cargoMgrIP
 	cargoInfo.CargoMgrPort = cargoMgrPort
 	TSize, err := strconv.ParseFloat(volSize, 64)
 	cargoInfo.TSize = TSize
 	cargoInfo.RSize = float64(0)
 
-	cargoInfo.PublicIP = utils.GetPublicIP()
-
 	port, err := freeport.GetFreePort()
 	cargoInfo.Port = int64(port)
 	cmd.CheckError(err)
 
-	lat, lon, ip := utils.GetLocationInfo(cargoInfo.PublicIP)
+	if synth {
+		cargoInfo.PublicIP = "127.0.0.1"
+	} else {
+		cargoInfo.PublicIP = utils.GetPublicIP()
+	}
+	lat, lon := utils.GetLocationInfo(cargoInfo.PublicIP, synth)
 	cargoInfo.Lat = lat
 	cargoInfo.Lon = lon
-	cargoInfo.PublicIP = ip
 
 	cargoInfo.TTC.cargoInfo = &cargoInfo
-
+	fmt.Fprintf(os.Stderr, "IP:%s --- Port: %d", cargoInfo.PublicIP, cargoInfo.Port)
 	return &cargoInfo
 }
 
