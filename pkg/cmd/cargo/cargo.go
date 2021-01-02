@@ -9,12 +9,13 @@ import (
 	"github.com/ArmadaStore/cargo/pkg/lib"
 )
 
-func Run(cargoMgrIP string, cargoMgrPort string, volSize string) error {
-	cargoInfo := lib.Init(cargoMgrIP, cargoMgrPort, volSize)
+func Run(cargoMgrIP string, cargoMgrPort string, cargoPort string, volSize string) error {
+	cargoInfo := lib.Init(cargoMgrIP, cargoMgrPort, cargoPort, volSize)
 	cargoInfo.Register()
 
 	var wg sync.WaitGroup
-	cargoInfo.ListenTasks(&wg)
-
+	wg.Add(1)
+	go cargoInfo.ListenTasks(&wg)
+	wg.Wait()
 	return fmt.Errorf("Hello")
 }

@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/phayes/freeport"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
@@ -41,7 +40,7 @@ type CargoInfo struct {
 	TTC TaskToCargoComm
 }
 
-func Init(cargoMgrIP string, cargoMgrPort string, volSize string) *CargoInfo {
+func Init(cargoMgrIP string, cargoMgrPort string, cargoPort string, volSize string) *CargoInfo {
 	var cargoInfo CargoInfo
 
 	synth := true
@@ -51,8 +50,11 @@ func Init(cargoMgrIP string, cargoMgrPort string, volSize string) *CargoInfo {
 	cargoInfo.TSize = TSize
 	cargoInfo.RSize = float64(0)
 
-	port, err := freeport.GetFreePort()
-	cargoInfo.Port = int64(port)
+	// port, err := freeport.GetFreePort()
+	// cargoInfo.Port = int64(port)
+	// cmd.CheckError(err)
+
+	cargoInfo.Port, err = strconv.ParseInt(cargoPort, 10, 64)
 	cmd.CheckError(err)
 
 	if synth {
@@ -65,6 +67,7 @@ func Init(cargoMgrIP string, cargoMgrPort string, volSize string) *CargoInfo {
 	cargoInfo.Lon = lon
 
 	cargoInfo.TTC.cargoInfo = &cargoInfo
+	logTime()
 	fmt.Fprintf(os.Stderr, "IP:%s --- Port: %d", cargoInfo.PublicIP, cargoInfo.Port)
 	return &cargoInfo
 }
@@ -89,6 +92,7 @@ func (cargoInfo *CargoInfo) Register() {
 }
 
 func (ttc *TaskToCargoComm) StoreInCargo(ctx context.Context, dts *taskToCargo.DataToStore) (*taskToCargo.Ack, error) {
+	appID := dts.GetAppID()
 	fileName := dts.GetFileName()
 	fileBuffer := dts.GetFileBuffer()
 	//fileSize := dts.GetFileSize()

@@ -72,7 +72,7 @@ func GetLocationInfo(ip string, synth bool) (float64, float64) {
 
 		return lat, lon
 	} else {
-		resp, err := http.Get("http://api.ipstack.com/" + ip + "?access_key=0b4b060808fd3d2eca19a17594008fdb")
+		resp, err := http.Get("http://api.ipstack.com/" + ip + "?access_key=add_your_access_key")
 		cmd.CheckError(err)
 		defer resp.Body.Close()
 
