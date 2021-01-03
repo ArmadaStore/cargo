@@ -16,6 +16,7 @@ import (
 
 	"github.com/ArmadaStore/cargo/internal/utils"
 	"github.com/ArmadaStore/cargo/pkg/cmd"
+	"github.com/ArmadaStore/comms/rpc/cargoToCargo"
 	"github.com/ArmadaStore/comms/rpc/cargoToMgr"
 	"github.com/ArmadaStore/comms/rpc/taskToCargo"
 )
@@ -24,6 +25,29 @@ type TaskToCargoComm struct {
 	taskToCargo.UnimplementedRpcTaskToCargoServer
 
 	cargoInfo *CargoInfo
+}
+
+type CargoToCargoComm struct {
+	cargoToCargo.UnimplementedRpcCargoToCargoServer
+
+	cargoInfo *CargoInfo
+}
+
+type ApplicationInfo struct {
+	AppID        string
+	nReplicas    int
+	replicaIPs   []string
+	replicaPorts []string
+}
+
+type CargoReplicaComm struct {
+	cc      *grpc.ClientConn
+	service interface{}
+}
+
+type CargoMgrComm struct {
+	cc      *grpc.ClientConn
+	service interface{}
 }
 
 type CargoInfo struct {
@@ -37,7 +61,12 @@ type CargoInfo struct {
 	TSize        float64
 	RSize        float64
 
+	AppInfo map[string]ApplicationInfo
+
+	CRC []CargoReplicaComm
+	CMC CargoMgrComm
 	TTC TaskToCargoComm
+	CTC CargoToCargoComm
 }
 
 func Init(cargoMgrIP string, cargoMgrPort string, cargoPort string, volSize string) *CargoInfo {
@@ -75,9 +104,10 @@ func Init(cargoMgrIP string, cargoMgrPort string, cargoPort string, volSize stri
 func (cargoInfo *CargoInfo) Register() {
 	conn, err := grpc.Dial(cargoInfo.CargoMgrIP+":"+cargoInfo.CargoMgrPort, grpc.WithInsecure())
 	cmd.CheckError(err)
-	defer conn.Close()
 
-	service := cargoToMgr.NewRpcCargoToMgrClient(conn)
+	cargoInfo.CMC.cc = conn
+
+	cargoInfo.CMC.service = cargoToMgr.NewRpcCargoToMgrClient(conn)
 	sendCargoInfo := cargoToMgr.CargoInfo{
 		IP:    cargoInfo.PublicIP,
 		Port:  strconv.Itoa(int(cargoInfo.Port)),
@@ -85,10 +115,17 @@ func (cargoInfo *CargoInfo) Register() {
 		Lat:   cargoInfo.Lat,
 		Lon:   cargoInfo.Lon,
 	}
+
+	// type assertion
+	service := cargoInfo.CMC.service.(cargoToMgr.RpcCargoToMgrClient)
 	ack, err := service.RegisterToMgr(context.Background(), &sendCargoInfo)
 	cmd.CheckError(err)
 
 	cargoInfo.ID = ack.GetID()
+}
+
+func (cargoInfo *CargoInfo) SendToReplicas(fileName string, AppID string) {
+
 }
 
 func (ttc *TaskToCargoComm) StoreInCargo(ctx context.Context, dts *taskToCargo.DataToStore) (*taskToCargo.Ack, error) {
@@ -101,6 +138,17 @@ func (ttc *TaskToCargoComm) StoreInCargo(ctx context.Context, dts *taskToCargo.D
 	err := ioutil.WriteFile(fileName, fileBuffer, 0644)
 	cmd.CheckError(err)
 
+	// replicas send
+	if aInfo, ok := ttc.cargoInfo.AppInfo[appID]; ok {
+
+	} else {
+		// type assertion
+		service := ttc.cargoInfo.CMC.service.(cargoToMgr.RpcCargoToMgrClient)
+		replicaInfo, err := service.GetReplicaInfo(context.Background(), &cargoToMgr.AppInfo{AppID: appID})
+		cmd.CheckError(err)
+
+	}
+
 	return &taskToCargo.Ack{Ack: "Stored data"}, nil
 }
 
@@ -112,9 +160,15 @@ func (cargoInfo *CargoInfo) ListenTasks(wg *sync.WaitGroup) {
 
 	server := grpc.NewServer()
 	taskToCargo.RegisterRpcTaskToCargoServer(server, &(cargoInfo.TTC))
+	cargoToCargo.RegisterRpcTaskToCargoServer(server, &(cargoInfo.CTC))
 
 	reflection.Register(server)
 
 	err = server.Serve(listen)
 	cmd.CheckError(err)
+}
+
+func (cargoInfo *CargoInfo) CleanUp() {
+	cargoInfo.CMC.cc.Close()
+
 }
