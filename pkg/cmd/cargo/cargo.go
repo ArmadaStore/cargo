@@ -16,6 +16,10 @@ func Run(cargoMgrIP string, cargoMgrPort string, cargoPort string, volSize strin
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go cargoInfo.ListenTasks(&wg)
+
+	wg.Add(1)
+	go cargoInfo.SendToReplicas()
+
 	wg.Wait()
 	return fmt.Errorf("Hello")
 }

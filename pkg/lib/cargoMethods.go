@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 
@@ -36,6 +37,7 @@ type CargoToCargoComm struct {
 type ApplicationInfo struct {
 	AppID        string
 	nReplicas    int
+	cargoIDs     []string
 	replicaIPs   []string
 	replicaPorts []string
 }
@@ -50,6 +52,10 @@ type CargoMgrComm struct {
 	service interface{}
 }
 
+type ReplicaData struct {
+	fileName string
+	appID    string
+}
 type CargoInfo struct {
 	ID           string
 	PublicIP     string
@@ -61,9 +67,10 @@ type CargoInfo struct {
 	TSize        float64
 	RSize        float64
 
-	AppInfo map[string]ApplicationInfo
+	AppInfo     map[string]ApplicationInfo
+	ReplicaChan chan ReplicaData
 
-	CRC []CargoReplicaComm
+	CRC map[string]CargoReplicaComm
 	CMC CargoMgrComm
 	TTC TaskToCargoComm
 	CTC CargoToCargoComm
@@ -95,6 +102,10 @@ func Init(cargoMgrIP string, cargoMgrPort string, cargoPort string, volSize stri
 	cargoInfo.Lat = lat
 	cargoInfo.Lon = lon
 
+	cargoInfo.AppInfo = make(map[string]ApplicationInfo)
+	cargoInfo.ReplicaChan = make(chan ReplicaData)
+	cargoInfo.CRC = make(map[string]CargoReplicaComm)
+
 	cargoInfo.TTC.cargoInfo = &cargoInfo
 	logTime()
 	fmt.Fprintf(os.Stderr, "IP:%s --- Port: %d", cargoInfo.PublicIP, cargoInfo.Port)
@@ -124,7 +135,58 @@ func (cargoInfo *CargoInfo) Register() {
 	cargoInfo.ID = ack.GetID()
 }
 
-func (cargoInfo *CargoInfo) SendToReplicas(fileName string, AppID string) {
+func (ttc *TaskToCargoComm) StoreInRelica(ctx context.Context, rd *cargoToCargo.ReplicaData) (*cargoToCargo.Ack, error) {
+	fileName := rd.GetFileName()
+	fileBuffer := rd.GetFileBuffer()
+	//fileSize := dts.GetFileSize()
+	//fileType := dts.GetFileType()
+
+	err := ioutil.WriteFile(fileName, fileBuffer, 0644)
+	cmd.CheckError(err)
+
+	return &cargoToCargo.Ack{Ack: "Stored data"}, nil
+}
+
+func (cargoInfo *CargoInfo) SendToReplicas() {
+	for {
+		replicaInfo := <-cargoInfo.ReplicaChan
+		appInfo := cargoInfo.AppInfo[replicaInfo.appID]
+		for i := 0; i < len(appInfo.cargoIDs); i++ {
+			var service cargoToCargo.RpcCargoToCargoClient
+			if crc, ok := cargoInfo.CRC[appInfo.cargoIDs[i]]; ok {
+				service = crc.service.(cargoToCargo.RpcCargoToCargoClient)
+
+			} else {
+				IP := appInfo.replicaIPs[i]
+				Port := appInfo.replicaPorts[i]
+				conn, err := grpc.Dial(IP+":"+Port, grpc.WithInsecure())
+				cmd.CheckError(err)
+
+				cargoInfo.CRC[appInfo.cargoIDs[i]] = CargoReplicaComm{
+					cc:      conn,
+					service: cargoToCargo.NewRpcCargoToCargoClient(conn),
+				}
+				service = cargoInfo.CRC[appInfo.cargoIDs[i]].service.(cargoToCargo.RpcCargoToCargoClient)
+			}
+
+			fileBuf, err := ioutil.ReadFile(replicaInfo.fileName)
+			cmd.CheckError(err)
+
+			sendReplicaData := cargoToCargo.ReplicaData{
+				FileName:   replicaInfo.fileName,
+				FileBuffer: fileBuf,
+				FileSize:   int64(len(fileBuf)),
+				FileType:   filepath.Ext(replicaInfo.fileName),
+				AppID:      replicaInfo.appID,
+			}
+			ack, err := service.StoreInReplica(context.Background(), &sendReplicaData)
+			cmd.CheckError(err)
+
+			logTime()
+			fmt.Fprintf(os.Stderr, "%s\n", ack)
+		}
+
+	}
 
 }
 
@@ -139,7 +201,7 @@ func (ttc *TaskToCargoComm) StoreInCargo(ctx context.Context, dts *taskToCargo.D
 	cmd.CheckError(err)
 
 	// replicas send
-	if aInfo, ok := ttc.cargoInfo.AppInfo[appID]; ok {
+	if _, ok := ttc.cargoInfo.AppInfo[appID]; ok {
 
 	} else {
 		// type assertion
@@ -147,7 +209,17 @@ func (ttc *TaskToCargoComm) StoreInCargo(ctx context.Context, dts *taskToCargo.D
 		replicaInfo, err := service.GetReplicaInfo(context.Background(), &cargoToMgr.AppInfo{AppID: appID})
 		cmd.CheckError(err)
 
+		newAppInfo := ApplicationInfo{
+			AppID:        appID,
+			nReplicas:    0,
+			cargoIDs:     replicaInfo.GetCargoID(),
+			replicaIPs:   replicaInfo.GetIP(),
+			replicaPorts: replicaInfo.GetPort(),
+		}
+		newAppInfo.nReplicas = len(newAppInfo.replicaIPs)
+		ttc.cargoInfo.AppInfo[appID] = newAppInfo
 	}
+	ttc.cargoInfo.ReplicaChan <- ReplicaData{fileName: fileName, appID: appID}
 
 	return &taskToCargo.Ack{Ack: "Stored data"}, nil
 }
@@ -160,7 +232,7 @@ func (cargoInfo *CargoInfo) ListenTasks(wg *sync.WaitGroup) {
 
 	server := grpc.NewServer()
 	taskToCargo.RegisterRpcTaskToCargoServer(server, &(cargoInfo.TTC))
-	cargoToCargo.RegisterRpcTaskToCargoServer(server, &(cargoInfo.CTC))
+	cargoToCargo.RegisterRpcCargoToCargoServer(server, &(cargoInfo.CTC))
 
 	reflection.Register(server)
 
