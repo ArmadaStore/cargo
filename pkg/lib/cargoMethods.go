@@ -135,7 +135,7 @@ func (cargoInfo *CargoInfo) Register() {
 	cargoInfo.ID = ack.GetID()
 }
 
-func (ttc *TaskToCargoComm) StoreInRelica(ctx context.Context, rd *cargoToCargo.ReplicaData) (*cargoToCargo.Ack, error) {
+func (ctc *CargoToCargoComm) StoreInRelica(ctx context.Context, rd *cargoToCargo.ReplicaData) (*cargoToCargo.Ack, error) {
 	fileName := rd.GetFileName()
 	fileBuffer := rd.GetFileBuffer()
 	//fileSize := dts.GetFileSize()
