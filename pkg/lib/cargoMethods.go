@@ -135,7 +135,7 @@ func (cargoInfo *CargoInfo) Register() {
 	cargoInfo.ID = ack.GetID()
 }
 
-func (ctc *CargoToCargoComm) StoreInRelica(ctx context.Context, rd *cargoToCargo.ReplicaData) (*cargoToCargo.Ack, error) {
+func (ctc *CargoToCargoComm) StoreInReplica(ctx context.Context, rd *cargoToCargo.ReplicaData) (*cargoToCargo.Ack, error) {
 	fileName := rd.GetFileName()
 	fileBuffer := rd.GetFileBuffer()
 	//fileSize := dts.GetFileSize()
@@ -143,6 +143,9 @@ func (ctc *CargoToCargoComm) StoreInRelica(ctx context.Context, rd *cargoToCargo
 
 	err := ioutil.WriteFile(fileName, fileBuffer, 0644)
 	cmd.CheckError(err)
+
+	logTime()
+	fmt.Fprintf(os.Stderr, "Written data locally\n")
 
 	return &cargoToCargo.Ack{Ack: "Stored data"}, nil
 }
@@ -187,6 +190,9 @@ func (cargoInfo *CargoInfo) SendToReplicas() {
 		}
 
 	}
+
+}
+func (ttc *TaskToCargoComm) LoadFromCargo(ctx context.Context, dtt *taskToCargo.FileInfo) (*taskToCargo.DataToLoad, error) {
 
 }
 
