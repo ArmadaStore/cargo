@@ -192,8 +192,20 @@ func (cargoInfo *CargoInfo) SendToReplicas() {
 	}
 
 }
-func (ttc *TaskToCargoComm) LoadFromCargo(ctx context.Context, dtt *taskToCargo.FileInfo) (*taskToCargo.DataToLoad, error) {
+func (ttc *TaskToCargoComm) LoadFromCargo(ctx context.Context, fileInfo *taskToCargo.FileInfo) (*taskToCargo.DataToLoad, error) {
+	fileName := fileInfo.GetFileName()
+	fileBuf, err := ioutil.ReadFile(fileName)
+	cmd.CheckError(err)
 
+	fileSize := len(fileBuf)
+	fileType := filepath.Ext(fileName)
+
+	return &taskToCargo.DataToLoad{
+		FileName:   fileName,
+		FileBuffer: fileBuf,
+		FileSize:   int64(fileSize),
+		FileType:   fileType,
+	}, nil
 }
 
 func (ttc *TaskToCargoComm) StoreInCargo(ctx context.Context, dts *taskToCargo.DataToStore) (*taskToCargo.Ack, error) {
