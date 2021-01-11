@@ -4,6 +4,7 @@ package lib
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -40,6 +41,7 @@ type ApplicationInfo struct {
 	cargoIDs     []string
 	replicaIPs   []string
 	replicaPorts []string
+	mutex        *sync.Mutex
 }
 
 type CargoReplicaComm struct {
@@ -76,6 +78,8 @@ type CargoInfo struct {
 	CTC CargoToCargoComm
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////
 func Init(cargoMgrIP string, cargoMgrPort string, cargoPort string, volSize string) *CargoInfo {
 	var cargoInfo CargoInfo
 
@@ -134,6 +138,30 @@ func (cargoInfo *CargoInfo) Register() {
 
 	cargoInfo.ID = ack.GetID()
 }
+
+func (cargoInfo *CargoInfo) ListenTasks(wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	listen, err := net.Listen("tcp", fmt.Sprintf("%s:%d", cargoInfo.PublicIP, cargoInfo.Port))
+	cmd.CheckError(err)
+
+	server := grpc.NewServer()
+	taskToCargo.RegisterRpcTaskToCargoServer(server, &(cargoInfo.TTC))
+	cargoToCargo.RegisterRpcCargoToCargoServer(server, &(cargoInfo.CTC))
+
+	reflection.Register(server)
+
+	err = server.Serve(listen)
+	cmd.CheckError(err)
+}
+
+func (cargoInfo *CargoInfo) CleanUp() {
+	cargoInfo.CMC.cc.Close()
+
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func (ctc *CargoToCargoComm) StoreInReplica(ctx context.Context, rd *cargoToCargo.ReplicaData) (*cargoToCargo.Ack, error) {
 	fileName := rd.GetFileName()
@@ -242,23 +270,81 @@ func (ttc *TaskToCargoComm) StoreInCargo(ctx context.Context, dts *taskToCargo.D
 	return &taskToCargo.Ack{Ack: "Stored data"}, nil
 }
 
-func (cargoInfo *CargoInfo) ListenTasks(wg *sync.WaitGroup) {
-	defer wg.Done()
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-	listen, err := net.Listen("tcp", fmt.Sprintf("%s:%d", cargoInfo.PublicIP, cargoInfo.Port))
+func (cargoInfo *CargoInfo) WriteToFile(appID string, fileName string, content string, writeSize int) {
+	mu := cargoInfo.AppInfo[appID].mutex
+	mu.Lock()
+	fileH, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	cmd.CheckError(err)
 
-	server := grpc.NewServer()
-	taskToCargo.RegisterRpcTaskToCargoServer(server, &(cargoInfo.TTC))
-	cargoToCargo.RegisterRpcCargoToCargoServer(server, &(cargoInfo.CTC))
-
-	reflection.Register(server)
-
-	err = server.Serve(listen)
+	writtenSize, err := fileH.WriteString(content)
 	cmd.CheckError(err)
+
+	if writtenSize != writeSize {
+		cmd.CheckError(errors.New("Written size not same as content size"))
+	}
+
+	fileH.Close()
+	mu.Unlock()
 }
 
-func (cargoInfo *CargoInfo) CleanUp() {
-	cargoInfo.CMC.cc.Close()
+func (cargoInfo *CargoInfo) ReadFromFile(appID string, fileName string) string {
+	mu := cargoInfo.AppInfo[appID].mutex
+	mu.Lock()
+	readBytes, err := ioutil.ReadFile(fileName)
+	cmd.CheckError(err)
+	mu.Unlock()
 
+	return string(readBytes)
+}
+
+func (ttc *TaskToCargoComm) WriteToCargo(ctx context.Context, wtc *taskToCargo.WriteData) (*taskToCargo.Ack, error) {
+	appID := wtc.GetAppID()
+	fileName := wtc.GetFileName()
+	fileBuffer := wtc.GetFileBuffer()
+	writeSize := int(wtc.GetWriteSize())
+	//fileSize := dts.GetFileSize()
+	//fileType := dts.GetFileType()
+
+	ttc.cargoInfo.WriteToFile(appID, fileName, string(fileBuffer), writeSize)
+
+	// replicas send
+	if _, ok := ttc.cargoInfo.AppInfo[appID]; ok {
+
+	} else {
+		// type assertion
+		service := ttc.cargoInfo.CMC.service.(cargoToMgr.RpcCargoToMgrClient)
+		replicaInfo, err := service.GetReplicaInfo(context.Background(), &cargoToMgr.AppInfo{AppID: appID})
+		cmd.CheckError(err)
+
+		newAppInfo := ApplicationInfo{
+			AppID:        appID,
+			nReplicas:    0,
+			cargoIDs:     replicaInfo.GetCargoID(),
+			replicaIPs:   replicaInfo.GetIP(),
+			replicaPorts: replicaInfo.GetPort(),
+		}
+		newAppInfo.nReplicas = len(newAppInfo.replicaIPs)
+		ttc.cargoInfo.AppInfo[appID] = newAppInfo
+	}
+	ttc.cargoInfo.ReplicaChan <- ReplicaData{fileName: fileName, appID: appID}
+
+	return &taskToCargo.Ack{Ack: "Stored data"}, nil
+}
+
+func (ttc *TaskToCargoComm) ReadFromCargo(ctx context.Context, readInfo *taskToCargo.ReadInfo) (*taskToCargo.ReadData, error) {
+	appID := readInfo.GetAppID()
+	fileName := readInfo.GetFileName()
+
+	content := ttc.cargoInfo.ReadFromFile(appID, fileName)
+
+	fileSize := len(content)
+
+	return &taskToCargo.ReadData{
+		FileName:   fileName,
+		FileBuffer: []byte(content),
+		FileSize:   int64(fileSize),
+	}, nil
 }
