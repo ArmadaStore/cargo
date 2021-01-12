@@ -3,6 +3,6 @@ module github.com/ArmadaStore/cargo
 go 1.15
 
 require (
-	github.com/ArmadaStore/comms v0.0.0-20210108194059-2511a487ebdc
-	google.golang.org/grpc v1.34.0
+	github.com/ArmadaStore/comms v0.0.0-20210111215619-9458ca4699e4
+	google.golang.org/grpc v1.34.1
 )

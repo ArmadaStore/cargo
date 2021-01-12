@@ -290,6 +290,50 @@ func (cargoInfo *CargoInfo) WriteToFile(appID string, fileName string, content s
 	mu.Unlock()
 }
 
+func (ctc *CargoToCargoComm) WriteInReplica(ctx context.Context, rd *cargoToCargo.ReplicaData) (*cargoToCargo.Ack, error) {
+	fileName := rd.GetFileName()
+	fileBuffer := rd.GetFileBuffer()
+	appID := rd.GetAppID()
+	fileSize := rd.GetFileSize()
+	//fileType := dts.GetFileType()
+
+	ctc.cargoInfo.WriteToFile(appID, fileName, string(fileBuffer), int(fileSize))
+
+	logTime()
+	fmt.Fprintf(os.Stderr, "Written data locally\n")
+
+	return &cargoToCargo.Ack{Ack: "Stored data"}, nil
+}
+
+func (cargoInfo *CargoInfo) WriteToReplicas(replicaData cargoToCargo.ReplicaData) {
+	appInfo := cargoInfo.AppInfo[replicaData.AppID]
+	for i := 0; i < len(appInfo.cargoIDs); i++ {
+		var service cargoToCargo.RpcCargoToCargoClient
+		if crc, ok := cargoInfo.CRC[appInfo.cargoIDs[i]]; ok {
+			service = crc.service.(cargoToCargo.RpcCargoToCargoClient)
+
+		} else {
+			IP := appInfo.replicaIPs[i]
+			Port := appInfo.replicaPorts[i]
+			conn, err := grpc.Dial(IP+":"+Port, grpc.WithInsecure())
+			cmd.CheckError(err)
+
+			cargoInfo.CRC[appInfo.cargoIDs[i]] = CargoReplicaComm{
+				cc:      conn,
+				service: cargoToCargo.NewRpcCargoToCargoClient(conn),
+			}
+			service = cargoInfo.CRC[appInfo.cargoIDs[i]].service.(cargoToCargo.RpcCargoToCargoClient)
+		}
+
+		ack, err := service.WriteInReplica(context.Background(), &replicaData)
+		cmd.CheckError(err)
+
+		logTime()
+		fmt.Fprintf(os.Stderr, "%s\n", ack)
+	}
+
+}
+
 func (cargoInfo *CargoInfo) ReadFromFile(appID string, fileName string) string {
 	mu := cargoInfo.AppInfo[appID].mutex
 	mu.Lock()
@@ -329,7 +373,22 @@ func (ttc *TaskToCargoComm) WriteToCargo(ctx context.Context, wtc *taskToCargo.W
 		newAppInfo.nReplicas = len(newAppInfo.replicaIPs)
 		ttc.cargoInfo.AppInfo[appID] = newAppInfo
 	}
-	ttc.cargoInfo.ReplicaChan <- ReplicaData{fileName: fileName, appID: appID}
+
+	replicaData := cargoToCargo.ReplicaData{
+		FileName:   fileName,
+		FileBuffer: fileBuffer,
+		FileSize:   int64(writeSize),
+		FileType:   "txt",
+		AppID:      appID,
+	}
+
+	service := ttc.cargoInfo.CMC.service.(cargoToMgr.RpcCargoToMgrClient)
+
+	_, err := service.AcquireWriteLock(context.Background(), &cargoToMgr.AppInfo{AppID: appID})
+	cmd.CheckError(err)
+	ttc.cargoInfo.WriteToReplicas(replicaData)
+	_, err = service.ReleaseWriteLock(context.Background(), &cargoToMgr.AppInfo{AppID: appID})
+	cmd.CheckError(err)
 
 	return &taskToCargo.Ack{Ack: "Stored data"}, nil
 }
@@ -345,6 +404,6 @@ func (ttc *TaskToCargoComm) ReadFromCargo(ctx context.Context, readInfo *taskToC
 	return &taskToCargo.ReadData{
 		FileName:   fileName,
 		FileBuffer: []byte(content),
-		FileSize:   int64(fileSize),
+		ReadSize:   int64(fileSize),
 	}, nil
 }
