@@ -274,8 +274,9 @@ func (ttc *TaskToCargoComm) StoreInCargo(ctx context.Context, dts *taskToCargo.D
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func (cargoInfo *CargoInfo) WriteToFile(appID string, fileName string, content string, writeSize int) {
-	mu := cargoInfo.AppInfo[appID].mutex
-	mu.Lock()
+	cargoInfo.AppInfo[appID].mutex.Lock()
+	//mu := cargoInfo.AppInfo[appID].mutex
+	// mu.Lock()
 	fileH, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	cmd.CheckError(err)
 
@@ -287,7 +288,8 @@ func (cargoInfo *CargoInfo) WriteToFile(appID string, fileName string, content s
 	}
 
 	fileH.Close()
-	mu.Unlock()
+	cargoInfo.AppInfo[appID].mutex.Unlock()
+	// mu.Unlock()
 }
 
 func (ctc *CargoToCargoComm) WriteInReplica(ctx context.Context, rd *cargoToCargo.ReplicaData) (*cargoToCargo.Ack, error) {
