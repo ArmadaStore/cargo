@@ -164,13 +164,15 @@ func (cargoInfo *CargoInfo) CleanUp() {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func (ctc *CargoToCargoComm) StoreInReplica(ctx context.Context, rd *cargoToCargo.ReplicaData) (*cargoToCargo.Ack, error) {
+	appID := rd.GetAppID()
 	fileName := rd.GetFileName()
 	fileBuffer := rd.GetFileBuffer()
-	//fileSize := dts.GetFileSize()
+	fileSize := rd.GetFileSize()
 	//fileType := dts.GetFileType()
 
-	err := ioutil.WriteFile(fileName, fileBuffer, 0644)
-	cmd.CheckError(err)
+	// err := ioutil.WriteFile(fileName, fileBuffer, 0644)
+	// cmd.CheckError(err)
+	ctc.cargoInfo.WriteToFile(appID, fileName, string(fileBuffer), int(fileSize))
 
 	logTime()
 	fmt.Fprintf(os.Stderr, "Written data locally\n")
@@ -240,11 +242,11 @@ func (ttc *TaskToCargoComm) StoreInCargo(ctx context.Context, dts *taskToCargo.D
 	appID := dts.GetAppID()
 	fileName := dts.GetFileName()
 	fileBuffer := dts.GetFileBuffer()
-	//fileSize := dts.GetFileSize()
+	fileSize := dts.GetFileSize()
 	//fileType := dts.GetFileType()
 
-	err := ioutil.WriteFile(fileName, fileBuffer, 0644)
-	cmd.CheckError(err)
+	// err := ioutil.WriteFile(fileName, fileBuffer, 0644)
+	// cmd.CheckError(err)
 
 	// replicas send
 	if _, ok := ttc.cargoInfo.AppInfo[appID]; ok {
@@ -261,10 +263,12 @@ func (ttc *TaskToCargoComm) StoreInCargo(ctx context.Context, dts *taskToCargo.D
 			cargoIDs:     replicaInfo.GetCargoID(),
 			replicaIPs:   replicaInfo.GetIP(),
 			replicaPorts: replicaInfo.GetPort(),
+			mutex:        sync.Mutex{},
 		}
 		newAppInfo.nReplicas = len(newAppInfo.replicaIPs)
 		ttc.cargoInfo.AppInfo[appID] = newAppInfo
 	}
+	ttc.cargoInfo.WriteToFile(appID, fileName, string(fileBuffer), int(fileSize))
 	ttc.cargoInfo.ReplicaChan <- ReplicaData{fileName: fileName, appID: appID}
 
 	return &taskToCargo.Ack{Ack: "Stored data"}, nil
@@ -354,8 +358,6 @@ func (ttc *TaskToCargoComm) WriteToCargo(ctx context.Context, wtc *taskToCargo.W
 	//fileSize := dts.GetFileSize()
 	//fileType := dts.GetFileType()
 
-	ttc.cargoInfo.WriteToFile(appID, fileName, string(fileBuffer), writeSize)
-
 	// replicas send
 	if _, ok := ttc.cargoInfo.AppInfo[appID]; ok {
 
@@ -371,10 +373,12 @@ func (ttc *TaskToCargoComm) WriteToCargo(ctx context.Context, wtc *taskToCargo.W
 			cargoIDs:     replicaInfo.GetCargoID(),
 			replicaIPs:   replicaInfo.GetIP(),
 			replicaPorts: replicaInfo.GetPort(),
+			mutex:        sync.Mutex{},
 		}
 		newAppInfo.nReplicas = len(newAppInfo.replicaIPs)
 		ttc.cargoInfo.AppInfo[appID] = newAppInfo
 	}
+	ttc.cargoInfo.WriteToFile(appID, fileName, string(fileBuffer), writeSize)
 
 	replicaData := cargoToCargo.ReplicaData{
 		FileName:   fileName,
