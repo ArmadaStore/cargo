@@ -263,7 +263,7 @@ func (ttc *TaskToCargoComm) StoreInCargo(ctx context.Context, dts *taskToCargo.D
 			cargoIDs:     replicaInfo.GetCargoID(),
 			replicaIPs:   replicaInfo.GetIP(),
 			replicaPorts: replicaInfo.GetPort(),
-			mutex:        sync.Mutex{},
+			mutex:        new(sync.Mutex),
 		}
 		newAppInfo.nReplicas = len(newAppInfo.replicaIPs)
 		ttc.cargoInfo.AppInfo[appID] = newAppInfo
@@ -373,7 +373,7 @@ func (ttc *TaskToCargoComm) WriteToCargo(ctx context.Context, wtc *taskToCargo.W
 			cargoIDs:     replicaInfo.GetCargoID(),
 			replicaIPs:   replicaInfo.GetIP(),
 			replicaPorts: replicaInfo.GetPort(),
-			mutex:        sync.Mutex{},
+			mutex:        new(sync.Mutex),
 		}
 		newAppInfo.nReplicas = len(newAppInfo.replicaIPs)
 		ttc.cargoInfo.AppInfo[appID] = newAppInfo
