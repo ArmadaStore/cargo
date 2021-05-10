@@ -102,6 +102,7 @@ func Init(cargoMgrIP string, cargoMgrPort string, cargoPort string, volSize stri
 	} else {
 		cargoInfo.PublicIP = utils.GetPublicIP()
 	}
+	synth = true
 	lat, lon := utils.GetLocationInfo(cargoInfo.PublicIP, synth)
 	cargoInfo.Lat = lat
 	cargoInfo.Lon = lon
