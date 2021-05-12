@@ -83,7 +83,7 @@ type CargoInfo struct {
 func Init(cargoMgrIP string, cargoMgrPort string, cargoPort string, volSize string) *CargoInfo {
 	var cargoInfo CargoInfo
 
-	synth := false
+	synth := true
 	cargoInfo.CargoMgrIP = cargoMgrIP
 	cargoInfo.CargoMgrPort = cargoMgrPort
 	TSize, err := strconv.ParseFloat(volSize, 64)
