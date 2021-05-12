@@ -264,7 +264,7 @@ func (ttc *TaskToCargoComm) StoreInCargo(ctx context.Context, dts *taskToCargo.D
 			cargoIDs:     replicaInfo.GetCargoID(),
 			replicaIPs:   replicaInfo.GetIP(),
 			replicaPorts: replicaInfo.GetPort(),
-			mutex:        new(sync.Mutex),
+			mutex:        &sync.Mutex{},
 		}
 		newAppInfo.nReplicas = len(newAppInfo.replicaIPs)
 		ttc.cargoInfo.AppInfo[appID] = newAppInfo
@@ -303,6 +303,27 @@ func (ctc *CargoToCargoComm) WriteInReplica(ctx context.Context, rd *cargoToCarg
 	appID := rd.GetAppID()
 	fileSize := rd.GetFileSize()
 	//fileType := dts.GetFileType()
+
+	fmt.Println("Writing to replica ", ctc.cargoInfo.Port, "\n")
+	if _, ok := ctc.cargoInfo.AppInfo[appID]; ok {
+
+	} else {
+		// type assertion
+		service := ctc.cargoInfo.CMC.service.(cargoToMgr.RpcCargoToMgrClient)
+		replicaInfo, err := service.GetReplicaInfo(context.Background(), &cargoToMgr.AppInfo{AppID: appID})
+		cmd.CheckError(err)
+
+		newAppInfo := ApplicationInfo{
+			AppID:        appID,
+			nReplicas:    0,
+			cargoIDs:     replicaInfo.GetCargoID(),
+			replicaIPs:   replicaInfo.GetIP(),
+			replicaPorts: replicaInfo.GetPort(),
+			mutex:        &sync.Mutex{},
+		}
+		newAppInfo.nReplicas = len(newAppInfo.replicaIPs)
+		ctc.cargoInfo.AppInfo[appID] = newAppInfo
+	}
 
 	ctc.cargoInfo.WriteToFile(appID, fileName, string(fileBuffer), int(fileSize))
 
@@ -374,7 +395,7 @@ func (ttc *TaskToCargoComm) WriteToCargo(ctx context.Context, wtc *taskToCargo.W
 			cargoIDs:     replicaInfo.GetCargoID(),
 			replicaIPs:   replicaInfo.GetIP(),
 			replicaPorts: replicaInfo.GetPort(),
-			mutex:        new(sync.Mutex),
+			mutex:        &sync.Mutex{},
 		}
 		newAppInfo.nReplicas = len(newAppInfo.replicaIPs)
 		ttc.cargoInfo.AppInfo[appID] = newAppInfo
