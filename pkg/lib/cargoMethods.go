@@ -391,6 +391,8 @@ func (ttc *TaskToCargoComm) WriteToCargo(ctx context.Context, wtc *taskToCargo.W
 
 	service := ttc.cargoInfo.CMC.service.(cargoToMgr.RpcCargoToMgrClient)
 
+	// Strong consistency
+	// Lock in Cargo Manager
 	_, err := service.AcquireWriteLock(context.Background(), &cargoToMgr.AppInfo{AppID: appID})
 	cmd.CheckError(err)
 	ttc.cargoInfo.WriteToReplicas(replicaData)
