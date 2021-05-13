@@ -112,6 +112,7 @@ func Init(cargoMgrIP string, cargoMgrPort string, cargoPort string, volSize stri
 	cargoInfo.CRC = make(map[string]CargoReplicaComm)
 
 	cargoInfo.TTC.cargoInfo = &cargoInfo
+	cargoInfo.CTC.cargoInfo = &cargoInfo
 	logTime()
 	fmt.Fprintf(os.Stderr, "IP:%s --- Port: %d", cargoInfo.PublicIP, cargoInfo.Port)
 	return &cargoInfo
@@ -285,6 +286,8 @@ func (cargoInfo *CargoInfo) WriteToFile(appID string, fileName string, content s
 	fileH, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	cmd.CheckError(err)
 
+	fmt.Println("Content: ", content)
+
 	writtenSize, err := fileH.WriteString(content)
 	cmd.CheckError(err)
 
@@ -304,6 +307,7 @@ func (ctc *CargoToCargoComm) WriteInReplica(ctx context.Context, rd *cargoToCarg
 	fileSize := rd.GetFileSize()
 	//fileType := dts.GetFileType()
 
+	fmt.Println("Test Print.......................")
 	fmt.Println("Writing to replica ", ctc.cargoInfo.Port, "\n")
 	if _, ok := ctc.cargoInfo.AppInfo[appID]; ok {
 
@@ -325,6 +329,7 @@ func (ctc *CargoToCargoComm) WriteInReplica(ctx context.Context, rd *cargoToCarg
 		ctc.cargoInfo.AppInfo[appID] = newAppInfo
 	}
 
+	fmt.Println("ToWrite Replica: ", string(fileBuffer))
 	ctc.cargoInfo.WriteToFile(appID, fileName, string(fileBuffer), int(fileSize))
 
 	logTime()
@@ -400,6 +405,7 @@ func (ttc *TaskToCargoComm) WriteToCargo(ctx context.Context, wtc *taskToCargo.W
 		newAppInfo.nReplicas = len(newAppInfo.replicaIPs)
 		ttc.cargoInfo.AppInfo[appID] = newAppInfo
 	}
+	fmt.Println("To Write: ", string(fileBuffer))
 	ttc.cargoInfo.WriteToFile(appID, fileName, string(fileBuffer), writeSize)
 
 	replicaData := cargoToCargo.ReplicaData{
