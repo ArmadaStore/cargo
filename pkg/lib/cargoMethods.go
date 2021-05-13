@@ -283,10 +283,10 @@ func (cargoInfo *CargoInfo) WriteToFile(appID string, fileName string, content s
 	cargoInfo.AppInfo[appID].mutex.Lock()
 	//mu := cargoInfo.AppInfo[appID].mutex
 	// mu.Lock()
-	fileH, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	fileH, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
 	cmd.CheckError(err)
 
-	fmt.Println("Content: ", content)
+	fmt.Println(fileName, " Content: ", content)
 
 	writtenSize, err := fileH.WriteString(content)
 	cmd.CheckError(err)
@@ -341,6 +341,9 @@ func (ctc *CargoToCargoComm) WriteInReplica(ctx context.Context, rd *cargoToCarg
 func (cargoInfo *CargoInfo) WriteToReplicas(replicaData cargoToCargo.ReplicaData) {
 	appInfo := cargoInfo.AppInfo[replicaData.AppID]
 	for i := 0; i < len(appInfo.cargoIDs); i++ {
+		if appInfo.cargoIDs[i] == cargoInfo.ID {
+			continue
+		}
 		var service cargoToCargo.RpcCargoToCargoClient
 		if crc, ok := cargoInfo.CRC[appInfo.cargoIDs[i]]; ok {
 			service = crc.service.(cargoToCargo.RpcCargoToCargoClient)
