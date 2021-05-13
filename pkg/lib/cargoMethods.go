@@ -281,12 +281,9 @@ func (ttc *TaskToCargoComm) StoreInCargo(ctx context.Context, dts *taskToCargo.D
 
 func (cargoInfo *CargoInfo) WriteToFile(appID string, fileName string, content string, writeSize int) {
 	cargoInfo.AppInfo[appID].mutex.Lock()
-	//mu := cargoInfo.AppInfo[appID].mutex
-	// mu.Lock()
+
 	fileH, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
 	cmd.CheckError(err)
-
-	fmt.Println(fileName, " Content: ", content)
 
 	writtenSize, err := fileH.WriteString(content)
 	cmd.CheckError(err)
@@ -297,7 +294,7 @@ func (cargoInfo *CargoInfo) WriteToFile(appID string, fileName string, content s
 
 	fileH.Close()
 	cargoInfo.AppInfo[appID].mutex.Unlock()
-	// mu.Unlock()
+
 }
 
 func (ctc *CargoToCargoComm) WriteInReplica(ctx context.Context, rd *cargoToCargo.ReplicaData) (*cargoToCargo.Ack, error) {
@@ -307,8 +304,6 @@ func (ctc *CargoToCargoComm) WriteInReplica(ctx context.Context, rd *cargoToCarg
 	fileSize := rd.GetFileSize()
 	//fileType := dts.GetFileType()
 
-	fmt.Println("Test Print.......................")
-	fmt.Println("Writing to replica ", ctc.cargoInfo.Port, "\n")
 	if _, ok := ctc.cargoInfo.AppInfo[appID]; ok {
 
 	} else {
@@ -329,11 +324,10 @@ func (ctc *CargoToCargoComm) WriteInReplica(ctx context.Context, rd *cargoToCarg
 		ctc.cargoInfo.AppInfo[appID] = newAppInfo
 	}
 
-	fmt.Println("ToWrite Replica: ", string(fileBuffer))
 	ctc.cargoInfo.WriteToFile(appID, fileName, string(fileBuffer), int(fileSize))
 
 	logTime()
-	fmt.Fprintf(os.Stderr, "Written data locally\n")
+	fmt.Println("WRITE COMPLETE")
 
 	return &cargoToCargo.Ack{Ack: "Stored data"}, nil
 }
@@ -365,9 +359,8 @@ func (cargoInfo *CargoInfo) WriteToReplicas(replicaData cargoToCargo.ReplicaData
 		cmd.CheckError(err)
 
 		logTime()
-		fmt.Fprintf(os.Stderr, "%s\n", ack)
+		fmt.Println("WRITE COMPLETE in ", appInfo.replicaIPs[i], ":", appInfo.replicaPorts[i])
 	}
-
 }
 
 func (cargoInfo *CargoInfo) ReadFromFile(appID string, fileName string) string {
@@ -408,7 +401,6 @@ func (ttc *TaskToCargoComm) WriteToCargo(ctx context.Context, wtc *taskToCargo.W
 		newAppInfo.nReplicas = len(newAppInfo.replicaIPs)
 		ttc.cargoInfo.AppInfo[appID] = newAppInfo
 	}
-	fmt.Println("To Write: ", string(fileBuffer))
 	ttc.cargoInfo.WriteToFile(appID, fileName, string(fileBuffer), writeSize)
 
 	replicaData := cargoToCargo.ReplicaData{
