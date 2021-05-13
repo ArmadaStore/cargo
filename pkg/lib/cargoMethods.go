@@ -364,11 +364,12 @@ func (cargoInfo *CargoInfo) WriteToReplicas(replicaData cargoToCargo.ReplicaData
 }
 
 func (cargoInfo *CargoInfo) ReadFromFile(appID string, fileName string) string {
-	mu := cargoInfo.AppInfo[appID].mutex
-	mu.Lock()
+	cargoInfo.AppInfo[appID].mutex.Lock()
+
 	readBytes, err := ioutil.ReadFile(fileName)
 	cmd.CheckError(err)
-	mu.Unlock()
+
+	cargoInfo.AppInfo[appID].mutex.Unlock()
 
 	return string(readBytes)
 }
