@@ -355,7 +355,7 @@ func (cargoInfo *CargoInfo) WriteToReplicas(replicaData cargoToCargo.ReplicaData
 			service = cargoInfo.CRC[appInfo.cargoIDs[i]].service.(cargoToCargo.RpcCargoToCargoClient)
 		}
 
-		ack, err := service.WriteInReplica(context.Background(), &replicaData)
+		_, err := service.WriteInReplica(context.Background(), &replicaData)
 		cmd.CheckError(err)
 
 		logTime()
