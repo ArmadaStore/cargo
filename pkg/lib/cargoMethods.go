@@ -97,12 +97,12 @@ func Init(cargoMgrIP string, cargoMgrPort string, cargoPort string, volSize stri
 	cargoInfo.Port, err = strconv.ParseInt(cargoPort, 10, 64)
 	cmd.CheckError(err)
 
-	if synth {
-		cargoInfo.PublicIP = "0.0.0.0"
-	} else {
-		cargoInfo.PublicIP = utils.GetPublicIP()
-	}
-	synth = true
+	// if synth {
+	// 	cargoInfo.PublicIP = "0.0.0.0"
+	// } else {
+	cargoInfo.PublicIP = utils.GetPublicIP()
+	// }
+	// synth = true
 	lat, lon := utils.GetLocationInfo(cargoInfo.PublicIP, synth)
 	cargoInfo.Lat = lat
 	cargoInfo.Lon = lon
@@ -144,7 +144,7 @@ func (cargoInfo *CargoInfo) Register() {
 func (cargoInfo *CargoInfo) ListenTasks(wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	listen, err := net.Listen("tcp", fmt.Sprintf("%s:%d", cargoInfo.PublicIP, cargoInfo.Port))
+	listen, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", cargoInfo.Port))
 	cmd.CheckError(err)
 
 	server := grpc.NewServer()
