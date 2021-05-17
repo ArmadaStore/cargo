@@ -98,7 +98,7 @@ func Init(cargoMgrIP string, cargoMgrPort string, cargoPort string, volSize stri
 	cmd.CheckError(err)
 
 	if synth {
-		cargoInfo.PublicIP = "127.0.0.1"
+		cargoInfo.PublicIP = "0.0.0.0"
 	} else {
 		cargoInfo.PublicIP = utils.GetPublicIP()
 	}
