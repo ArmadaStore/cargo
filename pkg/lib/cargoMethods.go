@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -42,6 +43,7 @@ type ApplicationInfo struct {
 	replicaIPs   []string
 	replicaPorts []string
 	mutex        *sync.Mutex
+	currPos      int64
 }
 
 type CargoReplicaComm struct {
@@ -174,7 +176,7 @@ func (ctc *CargoToCargoComm) StoreInReplica(ctx context.Context, rd *cargoToCarg
 
 	// err := ioutil.WriteFile(fileName, fileBuffer, 0644)
 	// cmd.CheckError(err)
-	ctc.cargoInfo.WriteToFile(appID, fileName, string(fileBuffer), int(fileSize))
+	ctc.cargoInfo.WriteToFile(appID, fileName, string(fileBuffer), int(fileSize), true)
 
 	logTime()
 	fmt.Fprintf(os.Stderr, "Written data locally\n")
@@ -266,11 +268,12 @@ func (ttc *TaskToCargoComm) StoreInCargo(ctx context.Context, dts *taskToCargo.D
 			replicaIPs:   replicaInfo.GetIP(),
 			replicaPorts: replicaInfo.GetPort(),
 			mutex:        &sync.Mutex{},
+			currPos:      0,
 		}
 		newAppInfo.nReplicas = len(newAppInfo.replicaIPs)
 		ttc.cargoInfo.AppInfo[appID] = newAppInfo
 	}
-	ttc.cargoInfo.WriteToFile(appID, fileName, string(fileBuffer), int(fileSize))
+	ttc.cargoInfo.WriteToFile(appID, fileName, string(fileBuffer), int(fileSize), false)
 	ttc.cargoInfo.ReplicaChan <- ReplicaData{fileName: fileName, appID: appID}
 
 	return &taskToCargo.Ack{Ack: "Stored data"}, nil
@@ -279,7 +282,7 @@ func (ttc *TaskToCargoComm) StoreInCargo(ctx context.Context, dts *taskToCargo.D
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-func (cargoInfo *CargoInfo) WriteToFile(appID string, fileName string, content string, writeSize int) {
+func (cargoInfo *CargoInfo) WriteToFile(appID string, fileName string, content string, writeSize int, isReplica bool) {
 	cargoInfo.AppInfo[appID].mutex.Lock()
 
 	fileH, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
@@ -290,6 +293,16 @@ func (cargoInfo *CargoInfo) WriteToFile(appID string, fileName string, content s
 
 	if writtenSize != writeSize {
 		cmd.CheckError(errors.New("Written size not same as content size"))
+	}
+
+	if !isReplica {
+		fileInfo, err := fileH.Stat()
+		if err != nil {
+			log.Fatalf("File stat error")
+		}
+		ainfo := cargoInfo.AppInfo[appID]
+		ainfo.currPos = fileInfo.Size()
+		cargoInfo.AppInfo[appID] = ainfo
 	}
 
 	fileH.Close()
@@ -319,12 +332,13 @@ func (ctc *CargoToCargoComm) WriteInReplica(ctx context.Context, rd *cargoToCarg
 			replicaIPs:   replicaInfo.GetIP(),
 			replicaPorts: replicaInfo.GetPort(),
 			mutex:        &sync.Mutex{},
+			currPos:      0,
 		}
 		newAppInfo.nReplicas = len(newAppInfo.replicaIPs)
 		ctc.cargoInfo.AppInfo[appID] = newAppInfo
 	}
 
-	ctc.cargoInfo.WriteToFile(appID, fileName, string(fileBuffer), int(fileSize))
+	ctc.cargoInfo.WriteToFile(appID, fileName, string(fileBuffer), int(fileSize), true)
 
 	logTime()
 	fmt.Println("WRITE COMPLETE")
@@ -366,9 +380,30 @@ func (cargoInfo *CargoInfo) WriteToReplicas(replicaData cargoToCargo.ReplicaData
 func (cargoInfo *CargoInfo) ReadFromFile(appID string, fileName string) string {
 	cargoInfo.AppInfo[appID].mutex.Lock()
 
-	readBytes, err := ioutil.ReadFile(fileName)
+	fileH, err := os.Open(fileName)
 	cmd.CheckError(err)
 
+	fileInfo, err := fileH.Stat()
+	if err != nil {
+		log.Fatalf("File stat error")
+	}
+
+	readSize := fileInfo.Size() - cargoInfo.AppInfo[appID].currPos
+	if readSize < 5 {
+		return string("")
+	}
+	_, err = fileH.Seek(cargoInfo.AppInfo[appID].currPos, 0)
+	if err != nil {
+		log.Fatalf("Seek error")
+	}
+	readBytes := make([]byte, readSize)
+	_, err = fileH.Read(readBytes)
+	if err != nil {
+		log.Fatalf("Read error")
+	}
+	ainfo := cargoInfo.AppInfo[appID]
+	ainfo.currPos = fileInfo.Size()
+	cargoInfo.AppInfo[appID] = ainfo
 	cargoInfo.AppInfo[appID].mutex.Unlock()
 
 	return string(readBytes)
@@ -398,11 +433,12 @@ func (ttc *TaskToCargoComm) WriteToCargo(ctx context.Context, wtc *taskToCargo.W
 			replicaIPs:   replicaInfo.GetIP(),
 			replicaPorts: replicaInfo.GetPort(),
 			mutex:        &sync.Mutex{},
+			currPos:      0,
 		}
 		newAppInfo.nReplicas = len(newAppInfo.replicaIPs)
 		ttc.cargoInfo.AppInfo[appID] = newAppInfo
 	}
-	ttc.cargoInfo.WriteToFile(appID, fileName, string(fileBuffer), writeSize)
+	ttc.cargoInfo.WriteToFile(appID, fileName, string(fileBuffer), writeSize, false)
 
 	replicaData := cargoToCargo.ReplicaData{
 		FileName:   fileName,
