@@ -71,7 +71,7 @@ type CargoInfo struct {
 	TSize        float64
 	RSize        float64
 
-	AppInfo     map[string]ApplicationInfo
+	AppInfo     map[string]*ApplicationInfo
 	ReplicaChan chan ReplicaData
 
 	CRC map[string]CargoReplicaComm
@@ -109,7 +109,7 @@ func Init(cargoMgrIP string, cargoMgrPort string, cargoPort string, volSize stri
 	cargoInfo.Lat = lat
 	cargoInfo.Lon = lon
 
-	cargoInfo.AppInfo = make(map[string]ApplicationInfo)
+	cargoInfo.AppInfo = make(map[string]*ApplicationInfo)
 	cargoInfo.ReplicaChan = make(chan ReplicaData)
 	cargoInfo.CRC = make(map[string]CargoReplicaComm)
 
@@ -261,15 +261,13 @@ func (ttc *TaskToCargoComm) StoreInCargo(ctx context.Context, dts *taskToCargo.D
 		replicaInfo, err := service.GetReplicaInfo(context.Background(), &cargoToMgr.AppInfo{AppID: appID})
 		cmd.CheckError(err)
 
-		newAppInfo := ApplicationInfo{
-			AppID:        appID,
-			nReplicas:    0,
-			cargoIDs:     replicaInfo.GetCargoID(),
-			replicaIPs:   replicaInfo.GetIP(),
-			replicaPorts: replicaInfo.GetPort(),
-			mutex:        &sync.Mutex{},
-			currPos:      0,
-		}
+		newAppInfo := new(ApplicationInfo)
+		newAppInfo.AppID = appID
+		newAppInfo.cargoIDs = replicaInfo.GetCargoID()
+		newAppInfo.replicaIPs = replicaInfo.GetIP()
+		newAppInfo.replicaPorts = replicaInfo.GetPort()
+		newAppInfo.mutex = new(sync.Mutex)
+		newAppInfo.currPos = 0
 		newAppInfo.nReplicas = len(newAppInfo.replicaIPs)
 		ttc.cargoInfo.AppInfo[appID] = newAppInfo
 	}
@@ -283,7 +281,9 @@ func (ttc *TaskToCargoComm) StoreInCargo(ctx context.Context, dts *taskToCargo.D
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func (cargoInfo *CargoInfo) WriteToFile(appID string, fileName string, content string, writeSize int, isReplica bool) {
+	// fmt.Println("Before write lock: ", cargoInfo.AppInfo[appID].mutex)
 	cargoInfo.AppInfo[appID].mutex.Lock()
+	// fmt.Println("After write lock: ", cargoInfo.AppInfo[appID].mutex)
 
 	fileH, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
 	cmd.CheckError(err)
@@ -300,14 +300,13 @@ func (cargoInfo *CargoInfo) WriteToFile(appID string, fileName string, content s
 		if err != nil {
 			log.Fatalf("File stat error")
 		}
-		ainfo := cargoInfo.AppInfo[appID]
-		ainfo.currPos = fileInfo.Size()
-		cargoInfo.AppInfo[appID] = ainfo
+		cargoInfo.AppInfo[appID].currPos = fileInfo.Size()
 	}
 
 	fileH.Close()
+	// fmt.Println("Before write unlock: ", cargoInfo.AppInfo[appID].mutex)
 	cargoInfo.AppInfo[appID].mutex.Unlock()
-
+	// fmt.Println("After write unlock: ", cargoInfo.AppInfo[appID].mutex)
 }
 
 func (ctc *CargoToCargoComm) WriteInReplica(ctx context.Context, rd *cargoToCargo.ReplicaData) (*cargoToCargo.Ack, error) {
@@ -325,16 +324,15 @@ func (ctc *CargoToCargoComm) WriteInReplica(ctx context.Context, rd *cargoToCarg
 		replicaInfo, err := service.GetReplicaInfo(context.Background(), &cargoToMgr.AppInfo{AppID: appID})
 		cmd.CheckError(err)
 
-		newAppInfo := ApplicationInfo{
-			AppID:        appID,
-			nReplicas:    0,
-			cargoIDs:     replicaInfo.GetCargoID(),
-			replicaIPs:   replicaInfo.GetIP(),
-			replicaPorts: replicaInfo.GetPort(),
-			mutex:        &sync.Mutex{},
-			currPos:      0,
-		}
+		newAppInfo := new(ApplicationInfo)
+		newAppInfo.AppID = appID
+		newAppInfo.cargoIDs = replicaInfo.GetCargoID()
+		newAppInfo.replicaIPs = replicaInfo.GetIP()
+		newAppInfo.replicaPorts = replicaInfo.GetPort()
+		newAppInfo.mutex = new(sync.Mutex)
+		newAppInfo.currPos = 0
 		newAppInfo.nReplicas = len(newAppInfo.replicaIPs)
+
 		ctc.cargoInfo.AppInfo[appID] = newAppInfo
 	}
 
@@ -378,7 +376,9 @@ func (cargoInfo *CargoInfo) WriteToReplicas(replicaData cargoToCargo.ReplicaData
 }
 
 func (cargoInfo *CargoInfo) ReadFromFile(appID string, fileName string) string {
+	// fmt.Println("Before read lock: ", cargoInfo.AppInfo[appID].mutex)
 	cargoInfo.AppInfo[appID].mutex.Lock()
+	// fmt.Println("After read lock: ", cargoInfo.AppInfo[appID].mutex)
 
 	fileH, err := os.Open(fileName)
 	cmd.CheckError(err)
@@ -389,7 +389,11 @@ func (cargoInfo *CargoInfo) ReadFromFile(appID string, fileName string) string {
 	}
 
 	readSize := fileInfo.Size() - cargoInfo.AppInfo[appID].currPos
+	// fmt.Println("ReadSize: ", readSize)
 	if readSize < 5 {
+		// fmt.Println("Before read unlock: ", cargoInfo.AppInfo[appID].mutex)
+		cargoInfo.AppInfo[appID].mutex.Unlock()
+		// fmt.Println("After read unlock: ", cargoInfo.AppInfo[appID].mutex)
 		return string("")
 	}
 	_, err = fileH.Seek(cargoInfo.AppInfo[appID].currPos, 0)
@@ -401,10 +405,10 @@ func (cargoInfo *CargoInfo) ReadFromFile(appID string, fileName string) string {
 	if err != nil {
 		log.Fatalf("Read error")
 	}
-	ainfo := cargoInfo.AppInfo[appID]
-	ainfo.currPos = fileInfo.Size()
-	cargoInfo.AppInfo[appID] = ainfo
+	cargoInfo.AppInfo[appID].currPos = fileInfo.Size()
+	// fmt.Println("Before read unlock: ", cargoInfo.AppInfo[appID].mutex)
 	cargoInfo.AppInfo[appID].mutex.Unlock()
+	// fmt.Println("After read unlock: ", cargoInfo.AppInfo[appID].mutex)
 
 	return string(readBytes)
 }
@@ -426,16 +430,15 @@ func (ttc *TaskToCargoComm) WriteToCargo(ctx context.Context, wtc *taskToCargo.W
 		replicaInfo, err := service.GetReplicaInfo(context.Background(), &cargoToMgr.AppInfo{AppID: appID})
 		cmd.CheckError(err)
 
-		newAppInfo := ApplicationInfo{
-			AppID:        appID,
-			nReplicas:    0,
-			cargoIDs:     replicaInfo.GetCargoID(),
-			replicaIPs:   replicaInfo.GetIP(),
-			replicaPorts: replicaInfo.GetPort(),
-			mutex:        &sync.Mutex{},
-			currPos:      0,
-		}
+		newAppInfo := new(ApplicationInfo)
+		newAppInfo.AppID = appID
+		newAppInfo.cargoIDs = replicaInfo.GetCargoID()
+		newAppInfo.replicaIPs = replicaInfo.GetIP()
+		newAppInfo.replicaPorts = replicaInfo.GetPort()
+		newAppInfo.mutex = new(sync.Mutex)
+		newAppInfo.currPos = 0
 		newAppInfo.nReplicas = len(newAppInfo.replicaIPs)
+
 		ttc.cargoInfo.AppInfo[appID] = newAppInfo
 	}
 	ttc.cargoInfo.WriteToFile(appID, fileName, string(fileBuffer), writeSize, false)
