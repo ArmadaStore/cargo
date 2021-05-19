@@ -454,7 +454,7 @@ func (ttc *TaskToCargoComm) WriteToCargo(ctx context.Context, wtc *taskToCargo.W
 
 		ttc.cargoInfo.AppInfo[appID] = newAppInfo
 	}
-	ttc.cargoInfo.mutex.Lock()
+	ttc.cargoInfo.mutex.Unlock()
 	ttc.cargoInfo.WriteToFile(appID, fileName, string(fileBuffer), writeSize, false)
 
 	replicaData := cargoToCargo.ReplicaData{
