@@ -37,17 +37,9 @@ type CargoToCargoComm struct {
 	cargoInfo *CargoInfo
 }
 
-type ConsistencyType string
-
-const (
-	Strong   ConsistencyType = "STRONG"
-	One                      = "ONE"
-	Eventual                 = "EVENTUAL"
-)
-
 type ApplicationInfo struct {
 	AppID        string
-	cType        ConsistencyType
+	cType        string
 	nReplicas    int
 	cargoIDs     []string
 	replicaIPs   []string
@@ -112,7 +104,7 @@ func Init(cargoMgrIP string, cargoMgrPort string, cargoPort string, volSize stri
 	cmd.CheckError(err)
 
 	// if synth {
-	// 	cargoInfo.PublicIP = "0.0.0.0"
+	// cargoInfo.PublicIP = "0.0.0.0"
 	// } else {
 	cargoInfo.PublicIP = utils.GetPublicIP()
 	// }
@@ -123,7 +115,7 @@ func Init(cargoMgrIP string, cargoMgrPort string, cargoPort string, volSize stri
 
 	cargoInfo.AppInfo = make(map[string]*ApplicationInfo)
 	cargoInfo.ReplicaChan = make(chan ReplicaData)
-	cargoInfo.ReplicaChannel = make(chan *cargoToCargo.ReplicaData)
+	cargoInfo.ReplicaChannel = make(chan cargoToCargo.ReplicaData)
 	cargoInfo.CRC = make(map[string]CargoReplicaComm)
 
 	cargoInfo.TTC.cargoInfo = &cargoInfo
@@ -421,7 +413,7 @@ func (cargoInfo *CargoInfo) WriteToReplicas() {
 				defer wg.Done()
 				_, err := service.WriteInReplica(context.Background(), &replicaData)
 				cmd.CheckError(err)
-				log.Println("WRITE COMPLETE in ", appInfo.replicaIPs[i], ":", appInfo.replicaPorts[i])
+				// log.Println("WRITE COMPLETE in ", appInfo.replicaIPs[i], ":", appInfo.replicaPorts[i])
 			}()
 		}
 	}
@@ -474,10 +466,10 @@ func (ttc *TaskToCargoComm) WriteToCargo(ctx context.Context, wtc *taskToCargo.W
 	// Lock in Cargo Manager
 	// _, err := service.AcquireWriteLock(context.Background(), &cargoToMgr.AppInfo{AppID: appID})
 	// cmd.CheckError(err)
-	if replicaInfo.GetCType() == Strong {
-		ttc.cargoInfo.WriteToReplicas(replicaData)
+	if ttc.cargoInfo.AppInfo[appID].cType == "STRONG" {
+		ttc.cargoInfo.StrongWriteToReplicas(replicaData)
 	} else {
-		ttc.cargoInfo.ReplicaChan <- replicaData
+		ttc.cargoInfo.ReplicaChannel <- replicaData
 	}
 	// _, err = service.ReleaseWriteLock(context.Background(), &cargoToMgr.AppInfo{AppID: appID})
 	// cmd.CheckError(err)
