@@ -24,13 +24,18 @@ type GeoLocInfo struct {
 
 // return the public of the calling node
 func GetPublicIP() string {
-	conn, err := net.Dial("udp", "8.8.8.8:80")
-	cmd.CheckError(err)
-	defer conn.Close()
-
-	publicIP := conn.LocalAddr().(*net.UDPAddr)
-
-	return publicIP.IP.String()
+	resp, err := http.Get(“https://ipecho.net/plain”)
+	if err != nil {
+		log.Println(err)
+		return "0.0.0.0"
+	}
+	defer resp.Body.Close()
+	ip, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "0.0.0.0"
+	}
+	publicIP := string(ip)
+	return publicIP
 }
 
 // return the lat, lon of the calling node
