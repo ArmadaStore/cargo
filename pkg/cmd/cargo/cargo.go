@@ -20,6 +20,9 @@ func Run(cargoMgrIP string, cargoMgrPort string, cargoPort string, volSize strin
 	// wg.Add(1)
 	// go cargoInfo.SendToReplicas()
 
+	wg.Add(1)
+	go cargoInfo.WriteToReplicas()
+
 	wg.Wait()
 	return fmt.Errorf("Hello")
 }
