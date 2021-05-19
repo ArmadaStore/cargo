@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
-	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -24,7 +23,7 @@ type GeoLocInfo struct {
 
 // return the public of the calling node
 func GetPublicIP() string {
-	resp, err := http.Get(“https://ipecho.net/plain”)
+	resp, err := http.Get("https://ipecho.net/plain")
 	if err != nil {
 		log.Println(err)
 		return "0.0.0.0"

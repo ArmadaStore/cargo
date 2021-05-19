@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -115,8 +116,7 @@ func Init(cargoMgrIP string, cargoMgrPort string, cargoPort string, volSize stri
 
 	cargoInfo.TTC.cargoInfo = &cargoInfo
 	cargoInfo.CTC.cargoInfo = &cargoInfo
-	logTime()
-	fmt.Fprintf(os.Stderr, "IP:%s --- Port: %d", cargoInfo.PublicIP, cargoInfo.Port)
+	log.Println("IP: ", cargoInfo.PublicIP, "--- Port:", cargoInfo.Port)
 	return &cargoInfo
 }
 
@@ -178,8 +178,7 @@ func (ctc *CargoToCargoComm) StoreInReplica(ctx context.Context, rd *cargoToCarg
 	// cmd.CheckError(err)
 	ctc.cargoInfo.WriteToFile(appID, fileName, string(fileBuffer), int(fileSize), true)
 
-	logTime()
-	fmt.Fprintf(os.Stderr, "Written data locally\n")
+	log.Println("Written data locally")
 
 	return &cargoToCargo.Ack{Ack: "Stored data"}, nil
 }
@@ -216,11 +215,8 @@ func (cargoInfo *CargoInfo) SendToReplicas() {
 				FileType:   filepath.Ext(replicaInfo.fileName),
 				AppID:      replicaInfo.appID,
 			}
-			ack, err := service.StoreInReplica(context.Background(), &sendReplicaData)
+			_, err = service.StoreInReplica(context.Background(), &sendReplicaData)
 			cmd.CheckError(err)
-
-			logTime()
-			fmt.Fprintf(os.Stderr, "%s\n", ack)
 		}
 
 	}
@@ -281,6 +277,7 @@ func (ttc *TaskToCargoComm) StoreInCargo(ctx context.Context, dts *taskToCargo.D
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func (cargoInfo *CargoInfo) WriteToFile(appID string, fileName string, content string, writeSize int, isReplica bool) {
+	start := time.Now()
 	// fmt.Println("Before write lock: ", cargoInfo.AppInfo[appID].mutex)
 	cargoInfo.AppInfo[appID].mutex.Lock()
 	// fmt.Println("After write lock: ", cargoInfo.AppInfo[appID].mutex)
@@ -307,6 +304,8 @@ func (cargoInfo *CargoInfo) WriteToFile(appID string, fileName string, content s
 	// fmt.Println("Before write unlock: ", cargoInfo.AppInfo[appID].mutex)
 	cargoInfo.AppInfo[appID].mutex.Unlock()
 	// fmt.Println("After write unlock: ", cargoInfo.AppInfo[appID].mutex)
+	end := time.Since(start)
+	log.Println("Write latency: ", end)
 }
 
 func (ctc *CargoToCargoComm) WriteInReplica(ctx context.Context, rd *cargoToCargo.ReplicaData) (*cargoToCargo.Ack, error) {
@@ -338,8 +337,7 @@ func (ctc *CargoToCargoComm) WriteInReplica(ctx context.Context, rd *cargoToCarg
 
 	ctc.cargoInfo.WriteToFile(appID, fileName, string(fileBuffer), int(fileSize), true)
 
-	logTime()
-	fmt.Println("WRITE COMPLETE")
+	log.Println("WRITE COMPLETE")
 
 	return &cargoToCargo.Ack{Ack: "Stored data"}, nil
 }
@@ -370,12 +368,12 @@ func (cargoInfo *CargoInfo) WriteToReplicas(replicaData cargoToCargo.ReplicaData
 		_, err := service.WriteInReplica(context.Background(), &replicaData)
 		cmd.CheckError(err)
 
-		logTime()
-		fmt.Println("WRITE COMPLETE in ", appInfo.replicaIPs[i], ":", appInfo.replicaPorts[i])
+		log.Println("WRITE COMPLETE in ", appInfo.replicaIPs[i], ":", appInfo.replicaPorts[i])
 	}
 }
 
 func (cargoInfo *CargoInfo) ReadFromFile(appID string, fileName string) string {
+	start := time.Now()
 	// fmt.Println("Before read lock: ", cargoInfo.AppInfo[appID].mutex)
 	cargoInfo.AppInfo[appID].mutex.Lock()
 	// fmt.Println("After read lock: ", cargoInfo.AppInfo[appID].mutex)
@@ -409,7 +407,9 @@ func (cargoInfo *CargoInfo) ReadFromFile(appID string, fileName string) string {
 	// fmt.Println("Before read unlock: ", cargoInfo.AppInfo[appID].mutex)
 	cargoInfo.AppInfo[appID].mutex.Unlock()
 	// fmt.Println("After read unlock: ", cargoInfo.AppInfo[appID].mutex)
+	end := time.Since(start)
 
+	log.Println("Read Latency: ", end)
 	return string(readBytes)
 }
 
@@ -453,6 +453,7 @@ func (ttc *TaskToCargoComm) WriteToCargo(ctx context.Context, wtc *taskToCargo.W
 
 	service := ttc.cargoInfo.CMC.service.(cargoToMgr.RpcCargoToMgrClient)
 
+	start := time.Now()
 	// Strong consistency
 	// Lock in Cargo Manager
 	_, err := service.AcquireWriteLock(context.Background(), &cargoToMgr.AppInfo{AppID: appID})
@@ -460,6 +461,8 @@ func (ttc *TaskToCargoComm) WriteToCargo(ctx context.Context, wtc *taskToCargo.W
 	ttc.cargoInfo.WriteToReplicas(replicaData)
 	_, err = service.ReleaseWriteLock(context.Background(), &cargoToMgr.AppInfo{AppID: appID})
 	cmd.CheckError(err)
+	end := time.Since(start)
+	log.Println("Total replica write latency: ", end)
 
 	return &taskToCargo.Ack{Ack: "Stored data"}, nil
 }
