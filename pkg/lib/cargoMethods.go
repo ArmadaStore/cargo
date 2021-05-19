@@ -377,7 +377,7 @@ func (cargoInfo *CargoInfo) StrongWriteToReplicas(replicaData cargoToCargo.Repli
 			defer wg.Done()
 			_, err := service.WriteInReplica(context.Background(), &replicaData)
 			cmd.CheckError(err)
-			log.Println("WRITE COMPLETE in ", appInfo.replicaIPs[i], ":", appInfo.replicaPorts[i])
+			// log.Println("WRITE COMPLETE in ", appInfo.replicaIPs[i], ":", appInfo.replicaPorts[i])
 		}()
 	}
 	wg.Wait()
