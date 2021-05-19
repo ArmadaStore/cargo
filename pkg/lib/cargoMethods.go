@@ -73,6 +73,7 @@ type CargoInfo struct {
 	Lon          float64
 	TSize        float64
 	RSize        float64
+	mutex        *sync.Mutex
 
 	AppInfo        map[string]*ApplicationInfo
 	ReplicaChannel chan cargoToCargo.ReplicaData
@@ -113,6 +114,7 @@ func Init(cargoMgrIP string, cargoMgrPort string, cargoPort string, volSize stri
 	cargoInfo.Lat = lat
 	cargoInfo.Lon = lon
 
+	cargoInfo.mutex = new(sync.Mutex)
 	cargoInfo.AppInfo = make(map[string]*ApplicationInfo)
 	cargoInfo.ReplicaChan = make(chan ReplicaData)
 	cargoInfo.ReplicaChannel = make(chan cargoToCargo.ReplicaData)
@@ -320,6 +322,7 @@ func (ctc *CargoToCargoComm) WriteInReplica(ctx context.Context, rd *cargoToCarg
 	fileSize := rd.GetFileSize()
 	//fileType := dts.GetFileType()
 
+	ctc.cargoInfo.mutex.Lock()
 	if _, ok := ctc.cargoInfo.AppInfo[appID]; ok {
 
 	} else {
@@ -340,6 +343,7 @@ func (ctc *CargoToCargoComm) WriteInReplica(ctx context.Context, rd *cargoToCarg
 
 		ctc.cargoInfo.AppInfo[appID] = newAppInfo
 	}
+	ctc.cargoInfo.mutex.Unlock()
 
 	ctc.cargoInfo.WriteToFile(appID, fileName, string(fileBuffer), int(fileSize), true)
 
@@ -429,6 +433,7 @@ func (ttc *TaskToCargoComm) WriteToCargo(ctx context.Context, wtc *taskToCargo.W
 	//fileType := dts.GetFileType()
 
 	// replicas send
+	ttc.cargoInfo.mutex.Lock()
 	if _, ok := ttc.cargoInfo.AppInfo[appID]; ok {
 
 	} else {
@@ -449,6 +454,7 @@ func (ttc *TaskToCargoComm) WriteToCargo(ctx context.Context, wtc *taskToCargo.W
 
 		ttc.cargoInfo.AppInfo[appID] = newAppInfo
 	}
+	ttc.cargoInfo.mutex.Lock()
 	ttc.cargoInfo.WriteToFile(appID, fileName, string(fileBuffer), writeSize, false)
 
 	replicaData := cargoToCargo.ReplicaData{
